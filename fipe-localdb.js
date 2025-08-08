@@ -12,6 +12,24 @@
     const $preco  = $(`[name="${f.preco_medio}"]`);
     const $mes    = $(`[name="${f.mes_referencia}"]`);
     const $reg    = f.regular_price ? $(`[name="${f.regular_price}"]`) : $();
+    
+    // --- Variáveis e funções de formatação ---
+    const $price = $('[name="_regular_price"]');
+    const $price2= $('[name="_price"]');
+    const $km    = $('[name="_quilometragem"]');
+
+    function onlyDigits(s){ return (s||'').replace(/\D+/g,''); }
+    function moneyBR(v){
+        let s = onlyDigits(v); if (s==='') return '';
+        while (s.length<3) s = '0'+s;
+        const cents = s.slice(-2);
+        let int = s.slice(0,-2).replace(/^0+/, '') || '0';
+        int = int.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+        return int+','+cents;
+    }
+    function intBR(v){ let s=onlyDigits(v); s=s.replace(/^0+/, '')||'0'; return s.replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+    function toWooPrice(s){ return s ? s.replace(/\./g,'').replace(',', '.') : ''; }
+    function unformatInt(s){ return onlyDigits(s); }
 
     // --- FUNÇÕES AUXILIARES ---
     function opt(v,t){ return `<option value="${String(v)}">${t}</option>`; }
@@ -95,7 +113,6 @@
         const preYear  = saved.year  || '';
         const preType  = saved.type  || '';
 
-        // Se não estiver no modo de edição (sem marca salva), apenas carrega as marcas e para.
         if (!preBrand) {
             if (preType) {
                 $tipo.filter(`[value="${preType}"]`).prop('checked', true);
@@ -104,68 +121,39 @@
             return;
         }
 
-        // --- CADEIA DE CARREGAMENTO CONTROLADA PARA O MODO DE EDIÇÃO ---
-        
-        // Define o tipo de veículo
         if (preType) {
             $tipo.filter(`[value="${preType}"]`).prop('checked', true);
         }
         
-        // 1. Carrega as marcas e seleciona a salva
         await loadMarcas();
         $marca.val(preBrand);
-        if ($marca.val() !== preBrand) return; // Para se a marca não for encontrada
+        if ($marca.val() !== preBrand) return;
         $marcaN.val($marca.find(':selected').text() || '');
 
-        // 2. Carrega os modelos e seleciona o salvo
         await loadModelos(preBrand);
         $modelo.val(preModel);
-        if ($modelo.val() !== preModel) return; // Para se o modelo não for encontrado
+        if ($modelo.val() !== preModel) return;
         $modeloN.val($modelo.find(':selected').text() || '');
 
-        // 3. Carrega os anos e seleciona o salvo
         await loadAnos(preBrand, preModel);
         $ano.val(preYear);
-        if ($ano.val() !== preYear) return; // Para se o ano não for encontrado
+        if ($ano.val() !== preYear) return;
         
-        // 4. Carrega o preço final
         await loadPreco(preBrand, preModel, preYear);
 
-        // 5. Sincroniza o ano de fabricação APÓS tudo ter sido carregado.
-        syncAno();
     });
 
-    // --- Funções de formatação (sem alterações) ---
-    function onlyDigits(s){ return (s||'').replace(/\D+/g,''); }
-    function moneyBR(v){
-        let s = onlyDigits(v); if (s==='') return '';
-        while (s.length<3) s = '0'+s;
-        const cents = s.slice(-2);
-        let int = s.slice(0,-2).replace(/^0+/, '') || '0';
-        int = int.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
-        return int+','+cents;
-    }
-    function intBR(v){ let s=onlyDigits(v); s=s.replace(/^0+/, '')||'0'; return s.replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
-    function toWooPrice(s){ return s ? s.replace(/\./g,'').replace(',', '.') : ''; }
-    function unformatInt(s){ return onlyDigits(s); }
-
-    const $price = $('[name="_regular_price"]');
-    const $price2= $('[name="_price"]');
-    const $km    = $('[name="_quilometragem"]');
-
+    // --- BINDING FINAL DOS EVENTOS DE FORMATAÇÃO ---
     function bindMoney($el){ if(!$el.length) return; $el.on('input blur', function(){ this.value = moneyBR(this.value); }); }
     function bindInt($el){ if(!$el.length) return; $el.on('input blur', function(){ this.value = intBR(this.value); }); }
 
-    bindMoney($price); bindMoney($price2); bindInt($km);
-
+    bindMoney($price); 
+    bindMoney($price2); 
+    bindInt($km);
+    
     $(document).on('submit','form.jet-form-builder, form.jet-form', function(){
         if ($price.length){ const norm = toWooPrice($price.val()); $price.val(norm); if($price2.length) $price2.val(norm); }
         if ($km.length){ $km.val(unformatInt($km.val())); }
     });
-
-    const $anoCode  = $('[name="__ano_modelo"]');
-    function syncAno(){ const year=(String($anoCode.val()||'').split('-')[0]||'').slice(0,4); if($anoLabel.length) $anoLabel.val(year); }
-    // A sincronização agora só é ativada pela interação do usuário ou ao final do carregamento da edição.
-    $(document).on('change input','[name="__ano_modelo"]', syncAno);
 
 })(jQuery);
