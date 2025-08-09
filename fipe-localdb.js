@@ -151,6 +151,14 @@
     bindMoney($price2); 
     bindInt($km);
     
+    // Adicionado: Formata o valor inicial dos campos de preço ao carregar a página
+    if ($price.length && $price.val()) {
+        $price.val(moneyBR($price.val()));
+    }
+    if ($price2.length && $price2.val()) {
+        $price2.val(moneyBR($price2.val()));
+    }
+
     $(document).on('submit','form.jet-form-builder, form.jet-form', function(){
         if ($price.length){ const norm = toWooPrice($price.val()); $price.val(norm); if($price2.length) $price2.val(norm); }
         if ($km.length){ $km.val(unformatInt($km.val())); }
