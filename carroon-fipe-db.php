@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Carroon FIPE DB
  * Description: Importa CSV para a tabela (wp_)fipe e mantém a tabela atualizada sob demanda via API v2 (com token). Expõe REST para o formulário (marcas, modelos, anos, preço) e confere mudanças mensalmente.
- * Version: 1.2.0
+ * Version: 1.2.4
  * Author: Carroon
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 final class Carroon_Fipe_DB {
-    const VERSION   = '1.2.0';
+    const VERSION   = '1.2.4';
     const TABLE     = 'fipe'; // usa prefixo do WP: wp_fipe
     const PAGE_SLUG = 'carroon-fipe-db';
     const OPT_TOKEN = 'carroon_fipe_token';
@@ -205,7 +205,7 @@ final class Carroon_Fipe_DB {
             'args'=>['type'=>['required'=>true,'sanitize_callback'=>'sanitize_text_field']],
             'callback'=>function($req){
                 $type = sanitize_text_field($req['type']);
-                $cache_key = "fipe_marcas_{$type}";
+                $cache_key = "fipe_marcas_{$type}_" . self::VERSION; // Chave versionada
                 $cached_data = get_transient($cache_key);
 
                 if (false !== $cached_data) {
@@ -221,7 +221,7 @@ final class Carroon_Fipe_DB {
                     $rows = array_map(fn($x)=>['codigo'=>(string)($x['code']??''),'nome'=>(string)($x['name']??'')], $list?:[]);
                 }
                 
-                set_transient($cache_key, $rows, 12 * HOUR_IN_SECONDS); // Cache por 12 horas
+                set_transient($cache_key, $rows, 12 * HOUR_IN_SECONDS);
                 return $rows;
             }
         ]);
@@ -232,7 +232,7 @@ final class Carroon_Fipe_DB {
             'callback'=>function($req){
                 $type=sanitize_text_field($req['type']); 
                 $brand=sanitize_text_field($req['brand']);
-                $cache_key = "fipe_modelos_{$type}_{$brand}";
+                $cache_key = "fipe_modelos_{$type}_{$brand}_" . self::VERSION; // Chave versionada
                 $cached_data = get_transient($cache_key);
 
                 if (false !== $cached_data) {
@@ -260,7 +260,7 @@ final class Carroon_Fipe_DB {
                 $type=sanitize_text_field($req['type']); 
                 $brand=sanitize_text_field($req['brand']); 
                 $model=sanitize_text_field($req['model']);
-                $cache_key = "fipe_anos_{$type}_{$brand}_{$model}";
+                $cache_key = "fipe_anos_{$type}_{$brand}_{$model}_" . self::VERSION; // Chave versionada
                 $cached_data = get_transient($cache_key);
 
                 if (false !== $cached_data) {
@@ -268,12 +268,28 @@ final class Carroon_Fipe_DB {
                 }
 
                 global $wpdb; $t=$this->table();
-                $rows = $wpdb->get_results($wpdb->prepare("SELECT year_code AS codigo, year_name AS nome FROM {$t} WHERE type=%s AND brand_code=%s AND model_code=%s GROUP BY year_code,year_name ORDER BY year_name",$type,$brand,$model), ARRAY_A);
+                $rows = $wpdb->get_results($wpdb->prepare("SELECT year_code AS codigo FROM {$t} WHERE type=%s AND brand_code=%s AND model_code=%s GROUP BY year_code ORDER BY year_code DESC",$type,$brand,$model), ARRAY_A);
                 
-                if (!$rows) {
+                if ($rows) {
+                    foreach ($rows as &$row) {
+                        $parts = explode('-', $row['codigo']);
+                        $row['nome'] = $parts[0];
+                    }
+                } else {
                     $slug=$this->v2slug($type);
                     $list=$this->http_json("{$this->base_v2}/{$slug}/brands/{$brand}/models/{$model}/years", true);
-                    $rows = array_map(fn($x)=>['codigo'=>(string)($x['code']??''),'nome'=>(string)($x['name']??'')], $list?:[]);
+                    $rows = array_map(function($x) {
+                        $code = (string)($x['code'] ?? '');
+                        // A API externa retorna o nome com combustível, então pegamos apenas o ano
+                        $name = (string)($x['name'] ?? '');
+                        preg_match('/^\d{4}/', $name, $matches);
+                        $year_only = $matches[0] ?? $name;
+
+                        return [
+                            'codigo' => $code,
+                            'nome'   => $year_only
+                        ];
+                    }, $list ?: []);
                 }
 
                 set_transient($cache_key, $rows, 12 * HOUR_IN_SECONDS);
@@ -344,6 +360,7 @@ final class Carroon_Fipe_DB {
             'modelo'         => '__modelo',
             'modelo_nome'    => 'model_value',
             'ano'            => '__ano_modelo',
+            'ano_rotulo'     => '__ano_modelo_rotulo',
             'preco_medio'    => '__valor_fipe',
             'mes_referencia' => 'month',
             // 'regular_price'  => '_regular_price',

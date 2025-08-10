@@ -9,6 +9,7 @@
     const $modelo = $(`[name="${f.modelo}"]`);
     const $modeloN= $(`[name="${f.modelo_nome}"]`);
     const $ano    = $(`[name="${f.ano}"]`);
+    const $anoN   = $(`[name="${f.ano_rotulo}"]`); // Novo campo para o rótulo do ano
     const $preco  = $(`[name="${f.preco_medio}"]`);
     const $mes    = $(`[name="${f.mes_referencia}"]`);
     const $reg    = f.regular_price ? $(`[name="${f.regular_price}"]`) : $();
@@ -58,11 +59,9 @@
         reset($ano,'Carregando…');
         const data = await jget(`${cfg.base}/anos?type=${encodeURIComponent(currentType())}&brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`);
         if (!Array.isArray(data) || !data.length){ reset($ano,'Sem anos'); return; }
-        const options = data.map(a => {
-            const code  = String(a.codigo ?? '');
-            const label = code.split('-')[0]; // só o ano
-            return opt(code, label);
-        });
+        
+        const options = data.map(a => opt(a.codigo, a.nome));
+
         $ano.html(opt('','Selecione o Ano') + options.join('')).prop('disabled',false);
     }
 
@@ -98,6 +97,7 @@
 
     $(document).on('change', `[name="${f.ano}"]`, function(){
         const code = $(this).val();
+        $anoN.val($(this).find(':selected').text() || ''); // Atualiza o rótulo ao mudar
         if (code) loadPreco($marca.val(), $modelo.val(), code);
     });
     
@@ -138,6 +138,7 @@
         await loadAnos(preBrand, preModel);
         $ano.val(preYear);
         if ($ano.val() !== preYear) return;
+        $anoN.val($ano.find(':selected').text() || ''); // Atualiza o rótulo na inicialização
         
         await loadPreco(preBrand, preModel, preYear);
 
@@ -151,7 +152,6 @@
     bindMoney($price2); 
     bindInt($km);
     
-    // Adicionado: Formata o valor inicial dos campos de preço ao carregar a página
     if ($price.length && $price.val()) {
         $price.val(moneyBR($price.val()));
     }
