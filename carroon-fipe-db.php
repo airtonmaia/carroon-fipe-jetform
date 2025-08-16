@@ -354,7 +354,7 @@ final class Carroon_Fipe_DB {
         );
 
         $fields_config = [
-            'tipo'           => 'tipo_veiculo',
+            'tipo'           => 'tipo_categoria_veiculo',
             'marca'          => '__marca',
             'marca_nome'     => 'rotulo_marca',
             'modelo'         => '__modelo',
