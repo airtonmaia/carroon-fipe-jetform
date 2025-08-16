@@ -1,0 +1,936 @@
+<?php
+/**
+ * Theme functions and definitions.
+ *
+ * For additional information on potential customization options,
+ * read the developers' documentation:
+ *
+ * https://developers.elementor.com/docs/hello-elementor-theme/
+ *
+ * @package HelloElementorChild
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly.
+}
+
+define( 'HELLO_ELEMENTOR_CHILD_VERSION', '2.0.0' );
+
+/**
+ * Load child theme scripts & styles.
+ *
+ * @return void
+ */
+function hello_elementor_child_scripts_styles() {
+
+	wp_enqueue_style(
+		'hello-elementor-child-style',
+		get_stylesheet_directory_uri() . '/style.css',
+		[
+			'hello-elementor-theme-style',
+		],
+		HELLO_ELEMENTOR_CHILD_VERSION
+	);
+
+}
+add_action( 'wp_enqueue_scripts', 'hello_elementor_child_scripts_styles', 20 );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Redireciona a edição do produto no Dokan conforme a categoria raiz (veiculos / servicos)
+add_action('template_redirect', function () {
+
+    // só no dashboard do vendedor e ao clicar em "Editar"
+    if ( ! is_user_logged_in() || ! function_exists('dokan_is_seller_dashboard') ) {
+        return;
+    }
+
+    if ( ! dokan_is_seller_dashboard() ) {
+        return;
+    }
+
+    // --- EDITAR ---
+    if ( isset($_GET['action'], $_GET['product_id']) && $_GET['action'] === 'edit' ) {
+        $product_id = absint($_GET['product_id']);
+        if ( ! $product_id ) {
+            return;
+        }
+
+        // helper: verifica se o produto está na categoria (slug) ou em algum descendente
+        $in_cat_tree = function( $prod_id, $slug ) {
+            $terms = wp_get_post_terms( $prod_id, 'product_cat', [ 'fields' => 'all' ] );
+            if ( is_wp_error( $terms ) || empty( $terms ) ) return false;
+
+            foreach ( $terms as $t ) {
+                if ( $t->slug === $slug ) return true;
+
+                $ancestors = get_ancestors( $t->term_id, 'product_cat' );
+                foreach ( $ancestors as $anc_id ) {
+                    $anc = get_term( $anc_id, 'product_cat' );
+                    if ( $anc && ! is_wp_error( $anc ) && $anc->slug === $slug ) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        // decide o destino
+        if ( $in_cat_tree( $product_id, 'veiculos' ) ) {
+            wp_safe_redirect( site_url( '/editar-produto/?pid=' . $product_id ) );
+            exit;
+        }
+
+        if ( $in_cat_tree( $product_id, 'servicos' ) ) {
+            wp_safe_redirect( site_url( '/editar-servico/?pid=' . $product_id ) );
+            exit;
+        }
+
+        // fallback: mantém sua página padrão de edição
+        wp_safe_redirect( site_url( '/editar-produto/?pid=' . $product_id ) );
+        exit;
+    }
+
+    // --- ADICIONAR NOVO (opcional) ---
+    // se existir botão genérico "Adicionar novo produto" do Dokan,
+    // podemos mandar para a tela correta se vier um parâmetro indicando a categoria desejada.
+    if ( isset($_GET['action']) && $_GET['action'] === 'new-product' ) {
+        // aceita product_cat=id/slug ou cat=...
+        $cat = '';
+        if ( isset($_GET['product_cat']) ) $cat = sanitize_text_field( wp_unslash($_GET['product_cat']) );
+        if ( isset($_GET['cat']) )         $cat = sanitize_text_field( wp_unslash($_GET['cat']) );
+
+        // se vier ID, converte para slug
+        if ( is_numeric($cat) ) {
+            $term = get_term( (int) $cat, 'product_cat' );
+            if ( $term && ! is_wp_error($term) ) {
+                $cat = $term->slug;
+            }
+        }
+
+        if ( $cat === 'veiculos' ) {
+            wp_safe_redirect( site_url('/adicionar-novo-veiculo') );
+            exit;
+        } elseif ( $cat === 'servicos' ) {
+            wp_safe_redirect( site_url('/adicionar-novo-servico') );
+            exit;
+        }
+        // fallback (se quiser pode trocar)
+        // wp_safe_redirect( site_url('/adicionar-produto/') ); exit;
+    }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Exibe sobre o vendedor
+function dokan_vendor_biography_shortcode() {
+    if (dokan_is_store_page()) {
+        // Obtém o ID do vendedor na página da loja
+        $dokan_store_user = dokan()->vendor->get( get_query_var( 'author' ) );
+        $user_id = $dokan_store_user->get_id();
+    } else {
+        // Se não estiver na loja, pega o usuário logado
+        if (!is_user_logged_in()) {
+            return '<p>Você precisa estar logado para ver esta informação.</p>';
+        }
+        $user_id = get_current_user_id();
+    }
+
+    // Obtém os dados do Dokan
+    $dokan_settings = get_user_meta($user_id, 'dokan_profile_settings', true);
+
+    // Verifica se os dados existem
+    if (!empty($dokan_settings)) {
+        // Tenta desserializar os dados (pois estão armazenados como array serializado)
+        if (is_string($dokan_settings)) {
+            $dokan_settings = maybe_unserialize($dokan_settings);
+        }
+
+        // Verifica se a biografia existe na chave 'vendor_biography'
+        if (isset($dokan_settings['vendor_biography']) && !empty($dokan_settings['vendor_biography'])) {
+            return '<p><strong>Sobre esse Vendedor:</strong><br> ' . esc_html($dokan_settings['vendor_biography']) . '</p>';
+        }
+    }
+
+    return '<p>Biografia não encontrada.</p>';
+}
+
+// Registra o shortcode [vendor_biography]
+add_shortcode('vendor_biography', 'dokan_vendor_biography_shortcode');
+
+
+
+
+function dokan_vendor_reviews_shortcode() {
+    if (dokan_is_store_page()) {
+        // Obtém o ID do vendedor na página da loja
+        $dokan_store_user = dokan()->vendor->get( get_query_var( 'author' ) );
+        $user_id = $dokan_store_user->get_id();
+    } else {
+        // Se não estiver na loja, pega o usuário logado
+        if (!is_user_logged_in()) {
+            return '<p>Você precisa estar logado para ver esta informação.</p>';
+        }
+        $user_id = get_current_user_id();
+    }
+
+    // Busca as avaliações (reviews) do vendedor no banco de dados
+    $args = array(
+        'user_id'       => $user_id,
+        'status'        => 'approve',
+        'type'          => 'dokan_review',
+        'orderby'       => 'comment_date',
+        'order'         => 'DESC',
+        'number'        => 5 // Número de avaliações a exibir
+    );
+
+    $reviews = get_comments($args);
+
+    if (empty($reviews)) {
+        return '<p>Este vendedor ainda não possui avaliações.</p>';
+    }
+
+    // Construção do HTML das avaliações
+    $output = '<div class="dokan-vendor-reviews">';
+    $output .= '<h3>Avaliações da Loja</h3>';
+
+    foreach ($reviews as $review) {
+        $rating = get_comment_meta($review->comment_ID, 'rating', true); // Obtém a nota da avaliação (1 a 5)
+        $rating_stars = str_repeat('⭐', (int)$rating); // Converte nota em estrelas
+        $output .= '<div class="dokan-review">';
+        $output .= '<p><strong>' . esc_html($review->comment_author) . '</strong> (' . esc_html($review->comment_date) . ')</p>';
+        $output .= '<p>' . esc_html($rating_stars) . '</p>';
+        $output .= '<p>' . esc_html($review->comment_content) . '</p>';
+        $output .= '<hr>';
+        $output .= '</div>';
+    }
+
+    $output .= '</div>';
+
+    return $output;
+}
+
+// Registra o shortcode [vendor_reviews]
+add_shortcode('vendor_reviews', 'dokan_vendor_reviews_shortcode');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Ativar automaticamente a loja do vendedor no momento do registro
+function dokan_activate_seller_store( $user_id ) {
+    // Verificar se o usuário registrado é um vendedor (role = seller)
+    $user = new WP_User( $user_id );
+    
+    // Se o novo usuário for um vendedor
+    if ( in_array( 'seller', $user->roles ) ) {
+        // Ativar a loja do vendedor alterando o status para 'active'
+        update_user_meta( $user_id, 'dokan_enable_selling', 'yes' );
+
+        // Definir o status da loja como ativo
+        update_user_meta( $user_id, 'dokan_publishing', 'yes' );
+
+        // Definir a loja como verificada (opcional)
+        update_user_meta( $user_id, 'dokan_verification_status', 'approved' );
+        
+        // Debug opcional para verificar a ativação automática (remover em produção)
+        error_log( "Loja do vendedor ID {$user_id} foi ativada automaticamente." );
+    }
+}
+add_action( 'user_register', 'dokan_activate_seller_store' );
+
+
+
+//AQUI COMEÇA A NOSSA JORNADA RUMO AO INFINITO
+
+
+function get_postmeta_as_json($post_id) {
+    global $wpdb; // Acessa o objeto global do banco de dados do WordPress
+
+    // Executa a query diretamente no banco de dados
+    $query = $wpdb->prepare("SELECT * FROM {$wpdb->prefix}postmeta WHERE post_id = %d", $post_id);
+    $results = $wpdb->get_results($query, ARRAY_A); // Pega os resultados como um array associativo
+
+    // Retorna como JSON
+    return ($results);
+}
+// Função para exibir metadados no rodapé
+function exibir_metadados_no_rodape() {
+    // Obter todos os metadados do post atual
+    if (is_single() || is_page()) { // Garante que seja uma página ou um post
+        $retorno = array();
+        $post_id = $_GET['pid'];
+        $post_meta_data = get_post_meta($post_id);
+        $lista_de_campo = array('marca','modelo','ano','valor_da_fipe');
+        if (!empty($post_meta_data)) {
+            foreach(get_postmeta_as_json($post_id) as $campo){
+                if(in_array($campo['meta_key'],$lista_de_campo)){
+                    $retorno[$campo['meta_key']] = $campo['meta_value'];
+                }
+            };
+            echo "<!-- debug under table ".$post_id."-".print_r($post_meta_data,true)." -->";
+            echo "<script>const valor_padrao = ".json_encode($retorno).";</script>";
+        }
+    }
+}
+
+// Adiciona a função ao hook 'wp_footer' para ser executada no rodapé
+if(isset($_GET['pid']))
+add_action('wp_footer', 'exibir_metadados_no_rodape');
+//AQUI TERMINA A NOSSA JORNADA RUMO AO INFINITO
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Registrar o shortcode para o formulário de filtro de marca com marcas dinâmicas
+function shortcode_filtro_marca_dinamico() {
+    global $wpdb;
+
+    echo "<div class='filtroCarros'>";
+    // Consultar as marcas no banco de dados
+    //$marcas = $wpdb->get_results( "SELECT DISTINCT meta_value FROM wp_postmeta WHERE meta_key = 'marca' ORDER BY meta_value ASC", ARRAY_A );
+
+/* 
+SELECT m1.meta_value as marca_id, m2.meta_value as marca_rotulo FROM wp_postmeta as m1
+INNER JOIN wp_postmeta as m2
+ON m1.post_id = m2.post_id and m2.meta_key ="marca_rotulo"
+WHERE m1.meta_key = 'marca'
+
+SELECT CONCAT(meta_value, ' (', count(*),') ') as nmeta_value, meta_value FROM wp_postmeta AS postmeta WHERE meta_key = 'marca' group by meta_value
+*/
+$marcas = $wpdb->get_results("SELECT m1.meta_value as marca_id, m2.meta_value as marca_rotulo FROM wp_postmeta as m1
+INNER JOIN wp_postmeta as m2
+ON m1.post_id = m2.post_id and m2.meta_key ='marca_rotulo'
+WHERE m1.meta_key = 'marca'", ARRAY_A );
+
+   $MARCA_SELECIONADA =  0;
+   if(isset($_GET['marca']))
+   $MARCA_SELECIONADA =  $_GET['marca'];
+
+    ob_start(); ?>
+
+    <form action="javascript:marcaSet()">
+        <script>
+            function marcaSet(){
+                //?jsf=jet-engine:result&_s=2014!meta%3Dano_rotulo
+                const idMarca = campo_marca.value;
+                window.location.href=""+window.location.pathname+"?jsf=jet-engine:result&_s="+idMarca+"!meta%3Dmarca&marca="+idMarca;
+                return false;
+            }
+            <?php if(isset($_GET['marca']) && $_GET['marca']!=""){ ?>
+            if(typeof valor_padrao =="undefined")
+            valor_padrao = {};
+            valor_padrao.marca = '<?php echo $_GET['marca']; ?>'; 
+            <?php } ?>
+        </script>
+        <label for="marca" class="titulocarroon">Escolha a Marca:</label>
+        <select onchange="" name="marca" class="marcaSelect">
+            <option value="">Selecione a Marca</option>
+            <?php foreach ( $marcas as $marca ) : ?>
+                <option value="<?php echo esc_attr( $marca['marca_id'] ); ?>" <?php selected($MARCA_SELECIONADA, $marca['marca_id'] ); ?>>
+                    
+                    <?php echo esc_html( $marca['marca_rotulo'] ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <style>
+            .titulocarroon {
+    font-family: "Barlow", Sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 10px;
+    color: #000;
+    text-transform: uppercase;
+}
+            </style>
+    </form>
+
+    <?php
+    // Exibir o valor do filtro de marca
+    if ( isset( $_GET['marca'] ) && !empty( $_GET['marca'] ) ) {
+        $marca_filtro = sanitize_text_field( $_GET['marca'] );
+        echo '<div><strong>Filtro de marca aplicado: </strong>' . esc_html( $marca_filtro ) . '</div>';
+    } else {
+        echo '<div><strong>Nenhum filtro de marca aplicado.</strong></div>';
+    }
+    echo "</div>";
+    return ob_get_clean();
+}
+add_shortcode( 'filtro_marca_dinamico', 'shortcode_filtro_marca_dinamico' );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Registrar o shortcode para o formulário de filtro de marca com marcas dinâmicas
+function shortcode_filtro_modelo_dinamico() {
+    echo "<div class='filtroCarros' data-marca=''>";
+    global $wpdb;
+
+     // Consultar as marcas no banco de dados
+$modelo = $wpdb->get_results("SELECT m1.meta_value as modelo_id, m2.meta_value as rotulo_modelo FROM wp_postmeta as m1
+INNER JOIN wp_postmeta as m2
+ON m1.post_id = m2.post_id and m2.meta_key ='rotulo_modelo'
+WHERE m1.meta_key = 'modelo'", ARRAY_A );
+
+   $MODELO_SELECIONADA =  0;
+   if(isset($_GET['modelo']))
+   $MODELO_SELECIONADA =  $_GET['modelo'];
+
+    ob_start(); ?>
+
+    <form action="javascript:modeloSet()">
+        <script>
+            function modeloSet(){
+                //?jsf=jet-engine:result&_s=2014!meta%3Dano_rotulo
+                const idModelo = campo_modelo.value;
+                window.location.href=""+window.location.pathname+"?jsf=jet-engine:result&_s="+idModelo+"!meta%3Dmodelo&modelo="+idModelo;
+                return false;
+            }
+            <?php if(isset($_GET['modelo']) && $_GET['modelo']!=""){ ?>
+            if(typeof valor_padrao =="undefined")
+            valor_padrao = {};
+            valor_padrao.modelo = '<?php echo $_GET['modelo']; ?>'; 
+            <?php } ?>
+        </script>
+        <label for="modelo" class="titulocarroon">Escolha o Modelo:</label>
+        <select onchange="" name="modelo" class="modeloSelect">
+            <option value="">Selecione a Modelo</option>
+            <?php foreach ( $modelo as $modelo ) : ?>
+                <option value="<?php echo esc_attr( $modelo['modelo_id'] ); ?>" <?php selected($MODELO_SELECIONADA, $modelo['modelo_id'] ); ?>>
+               
+                    <?php echo esc_html( $modelo['rotulo_modelo'] ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </form>
+
+    <?php
+    // Exibir o valor do filtro de marca
+    if ( isset( $_GET['modelo'] ) && !empty( $_GET['modelo'] ) ) {
+        $modelo_filtro = sanitize_text_field( $_GET['modelo'] );
+        echo '<div><strong>Filtro de modelo aplicado: </strong>' . esc_html( $modelo_filtro ) . '</div>';
+    } else {
+        echo '<div><strong>Nenhum filtro de modelo aplicado.</strong></div>';
+    }
+    echo '</div>';
+    return ob_get_clean();
+}
+add_shortcode( 'filtro_modelo_dinamico', 'shortcode_filtro_modelo_dinamico' );
+
+
+
+
+
+
+// Registrar o shortcode para o formulário de filtro de marca com marcas dinâmicas
+function shortcode_filtro_ano_dinamico() {
+    global $wpdb;
+
+    echo "<div class='filtroCarros' data-marca='' data-modelo=''>";
+     // Consultar as marcas no banco de dados
+$ano = $wpdb->get_results("SELECT m1.meta_value as ano_id, m2.meta_value as ano_rotulo FROM wp_postmeta as m1
+INNER JOIN wp_postmeta as m2
+ON m1.post_id = m2.post_id and m2.meta_key ='ano_rotulo'
+WHERE m1.meta_key = 'ano'", ARRAY_A );
+
+   $ANO_SELECIONADA =  0;
+   if(isset($_GET['ano']))
+   $ANO_SELECIONADA =  $_GET['ano'];
+
+    ob_start(); ?>
+
+    <form action="javascript:anoSet()">
+        <script>
+            function anoSet(){
+                //?jsf=jet-engine:result&_s=2014!meta%3Dano_rotulo
+                const idAno = campo_ano.value;
+                window.location.href=""+window.location.pathname+"?jsf=jet-engine:result&_s="+idAno+"!meta%3Dano&ano="+idAno;
+                return false;
+            }
+            <?php if(isset($_GET['ano']) && $_GET['ano']!=""){ ?>
+            if(typeof valor_padrao =="undefined")
+            valor_padrao = {};
+            valor_padrao.ano = '<?php echo $_GET['ano']; ?>'; 
+            <?php } ?>
+        </script>
+        <label for="ano" class="titulocarroon">Escolha o Ano:</label>
+        <select onchange="" name="ano" class="anoSelect">
+            <option value="">Selecione a Ano</option>
+            <?php foreach ( $ano as $ano ) : ?>
+                <option value="<?php echo esc_attr( $ano['ano_id'] ); ?>" <?php selected($ANO_SELECIONADA, $ano['ano_id'] ); ?>>
+               
+                    <?php echo esc_html( $ano['ano_rotulo'] ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </form>
+
+    <?php
+    // Exibir o valor do filtro de marca
+    if ( isset( $_GET['ano'] ) && !empty( $_GET['ano'] ) ) {
+        $ano_filtro = sanitize_text_field( $_GET['ano'] );
+        echo '<div><strong>Filtro de ano aplicado: </strong>' . esc_html( $ano_filtro ) . '</div>';
+    } else {
+       echo '<div><strong>Nenhum filtro de ano aplicado.</strong></div>';
+    }
+    echo "</div>";
+    return ob_get_clean();
+}
+add_shortcode( 'filtro_ano_dinamico', 'shortcode_filtro_ano_dinamico' );
+
+
+
+
+
+// Define o menu produtos como dashboard
+add_filter('dokan_get_dashboard_nav', 'make_products_main_menu', 10, 1);
+
+function make_products_main_menu($urls) {
+    // Verifique se o menu 'products' existe antes de proceder
+    if (isset($urls['products'])) {
+        // Redefina o URL do Dashboard para o link do menu Produtos
+        $urls['dashboard']['url'] = $urls['products']['url'];
+        $urls['dashboard']['title'] = $urls['products']['title'];
+        
+        // Opcional: Remova o menu Produtos para evitar duplicação
+        unset($urls['products']);
+    }
+
+    return $urls;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Função para alterar o status do produto
+function handle_product_status_change() {
+    // Verifica se estamos no painel de administração e na página de listagem de produtos do Dokan
+    if ( is_admin() && isset( $_GET['post_type'] ) && $_GET['post_type'] === 'product' ) {
+        if ( isset( $_GET['action'] ) && isset( $_GET['post'] ) ) {
+            $product_id = intval( $_GET['post'] );
+
+            // Verifica se o produto existe
+            if ( ! get_post( $product_id ) ) {
+                return;
+            }
+
+            // Verifica a ação e altera o status do produto
+            if ( 'pause' === $_GET['action'] ) {
+                // Alterar o status para rascunho (pausar)
+                wp_update_post( array(
+                    'ID' => $product_id,
+                    'post_status' => 'draft', // Pausa o produto
+                ) );
+            } elseif ( 'activate' === $_GET['action'] ) {
+                // Alterar o status para publicado (ativar)
+                wp_update_post( array(
+                    'ID' => $product_id,
+                    'post_status' => 'publish', // Ativa o produto
+                ) );
+            }
+
+            // Redireciona de volta para a página do dashboard do Dokan, mantendo o mesmo estado
+          
+          // Redirecionar de volta para o dashboard do Dokan
+        wp_redirect( home_url( '/dashboard/products/' ) ); // Redireciona para a URL personalizada
+        exit;
+        }
+    }
+}
+add_action( 'admin_init', 'handle_product_status_change' );
+
+
+
+
+
+
+
+
+add_action('wp_footer', 'add_open_in_new_tab_script');
+function add_open_in_new_tab_script() {
+    // Verifica se estamos no painel do vendedor
+    if (dokan_is_seller_dashboard()) {
+        ?>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const menuLink = document.querySelector('a[href*="relatorio"]');
+                if (menuLink) {
+                    menuLink.setAttribute('target', '_blank');
+                }
+            });
+        </script>
+        <?php
+    }
+}
+
+
+
+
+
+
+// ADD NOVO MENU NO DASHBOARD
+add_filter('dokan_get_dashboard_nav', 'add_custom_dokan_menu');
+function add_custom_dokan_menu($urls) {
+    $urls['custom-menu'] = [
+        'title' => __('Relatório', 'textdomain'),
+        'icon'  => '<i class="fas fa-cogs"></i>', // Ícone opcional (FontAwesome)
+        'url'   => dokan_get_navigation_url('relatorio'),
+        'pos'   => 50, // Posição do menu
+    ];
+
+    return $urls;
+}
+
+add_action('dokan_load_custom_template', 'load_custom_dokan_menu_content');
+function load_custom_dokan_menu_content() {
+    // Verifica se estamos na página do menu personalizado
+    if (dokan_is_seller_dashboard() && dokan_get_current_page_url() === dokan_get_navigation_url('custom-menu')) {
+        echo do_shortcode('[seu_shortcode]');
+    }
+}
+
+// Carrega o conteúdo do menu
+add_action('dokan_dashboard_content_inside_before', 'show_custom_dokan_menu_content');
+function show_custom_dokan_menu_content() {
+    if (get_query_var('dokan_dashboard_page') === 'custom-menu') {
+        do_action('dokan_load_custom_template');
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+function dokan_shop_search_form() {
+    ob_start();
+
+    // Captura a query de busca, se existir
+    $search_query = isset($_GET['dokan_seller_search']) ? sanitize_text_field($_GET['dokan_seller_search']) : '';
+
+    ?>
+    <form method="GET" action="" id="cssBuscar">
+        <!--<label for="dokan_seller_search">Buscar por loja:</label>-->
+        <input type="text" id="dokan_seller_search" name="dokan_seller_search" value="<?php echo esc_attr($search_query); ?>" placeholder="Buscar por loja">
+        <input type="hidden" name="_store_filter_nonce" value="143d1adec9">
+        <button type="submit">Buscar Loja</button>
+    </form>
+    <div class="dokan-shop-results" style="display:none">
+        <?php
+        if ($search_query && isset($_GET['_store_filter_nonce']) && $_GET['_store_filter_nonce'] === '143d1adec9') {
+            // Busca todas as lojas registradas
+            $args = array(
+                'number' => -1,               // Retorna todas as lojas
+                'status' => 'approved',       // Apenas lojas aprovadas
+                'name'   => $search_query,    // Busca pelo nome da loja
+            );
+
+            $vendors = dokan()->vendor->all($args);
+
+            if (!empty($vendors)) {
+                echo '<ul>';
+                foreach ($vendors as $vendor) {
+                    $store_info = dokan_get_store_info($vendor->get_id());
+                    $store_name = $store_info['store_name'] ?? $vendor->get_name();
+                    $store_url  = dokan_get_store_url($vendor->get_id());
+                    echo '<li><a href="' . esc_url($store_url) . '">' . esc_html($store_name) . '</a></li>';
+                }
+                echo '</ul>';
+            } else {
+                echo '<p>Nenhuma loja encontrada.</p>';
+            }
+        }
+        ?>
+    </div>
+    <?php
+
+    return ob_get_clean();
+}
+
+// Registra o shortcode [dokan_shop_search]
+add_shortcode('dokan_shop_search', 'dokan_shop_search_form');
+
+
+
+
+
+//traduzir forçado
+function custom_dokan_filter_translation($translated_text, $text, $domain) {
+    if ($domain === 'dokan') {
+        if ($text === 'Search Vendors') {
+            $translated_text = 'Buscar por nome da loja';
+        }
+         if ($text === 'Location') {
+            $translated_text = 'Localização';
+        }
+        if ($text === 'Open Now') {
+            $translated_text = 'Aberto agora';
+        }
+        if ($text === 'Featured') {
+            $translated_text = 'Loja em destaque';
+        }
+        if ($text === 'Rating:') {
+            $translated_text = 'Avaliações';
+        }
+         if ($text === 'Radius') {
+            $translated_text = 'Raio';
+        }
+        // Adicione mais condições conforme necessário para outras strings de filtro
+    }
+    return $translated_text;
+}
+add_filter('gettext', 'custom_dokan_filter_translation', 20, 3);
+
+
+
+
+
+
+//funcao para deletar post
+
+function carroon_in_cat_tree( $product_id, $slug ) {
+    $terms = wp_get_post_terms( $product_id, 'product_cat', [ 'fields' => 'ids' ] );
+    if ( is_wp_error( $terms ) || empty( $terms ) ) {
+        return false;
+    }
+    foreach ( $terms as $term_id ) {
+        $term = get_term( $term_id, 'product_cat' );
+        if ( $term && ! is_wp_error( $term ) ) {
+            if ( $term->slug === $slug ) {
+                return true;
+            }
+            $ancestors = get_ancestors( $term_id, 'product_cat' );
+            foreach ( $ancestors as $anc_id ) {
+                $anc = get_term( $anc_id, 'product_cat' );
+                if ( $anc && ! is_wp_error( $anc ) && $anc->slug === $slug ) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// === Redireciona edição conforme a categoria raiz: veiculos / servicos ===
+add_action( 'template_redirect', function () {
+    if ( ! is_user_logged_in() ) {
+        return;
+    }
+
+    // 1) Clique em "Editar" dentro do dashboard do Dokan
+    if ( function_exists( 'dokan_is_seller_dashboard' )
+        && dokan_is_seller_dashboard()
+        && isset( $_GET['action'], $_GET['product_id'] )
+        && $_GET['action'] === 'edit'
+    ) {
+        $product_id = absint( $_GET['product_id'] );
+        if ( $product_id ) {
+            if ( carroon_in_cat_tree( $product_id, 'servicos' ) ) {
+                wp_safe_redirect( site_url( '/editar-servico/?pid=' . $product_id ) );
+                exit;
+            }
+            if ( carroon_in_cat_tree( $product_id, 'veiculos' ) ) {
+                wp_safe_redirect( site_url( '/editar-produto/?pid=' . $product_id ) );
+                exit;
+            }
+        }
+    }
+
+    // 2) Correção se alguém cair direto na página errada (links antigos/caches)
+    $pid = isset( $_GET['pid'] ) ? absint( $_GET['pid'] ) : 0;
+    if ( $pid ) {
+        // Se o produto é "servicos" mas a URL é /editar-produto → manda para /editar-servico
+        if ( is_page( 'editar-produto' ) && carroon_in_cat_tree( $pid, 'servicos' ) ) {
+            wp_safe_redirect( site_url( '/editar-servico/?pid=' . $pid ) );
+            exit;
+        }
+        // Se o produto é "veiculos" mas a URL é /editar-servico → manda para /editar-produto
+        if ( is_page( 'editar-servico' ) && carroon_in_cat_tree( $pid, 'veiculos' ) ) {
+            wp_safe_redirect( site_url( '/editar-produto/?pid=' . $pid ) );
+            exit;
+        }
+    }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//Filtro funcinoal
+// Ordenação alfabética (A→Z / Z→A) na listagem do vendedor (Dokan)
+function carroon_alpha_order_for_dokan( $args ) {
+    $dir = isset($_GET['order_alpha']) ? strtolower( sanitize_text_field( wp_unslash( $_GET['order_alpha'] ) ) ) : '';
+    if ( in_array( $dir, ['asc','desc'], true ) ) {
+        $args['orderby'] = 'title';
+        $args['order']   = strtoupper( $dir );
+    }
+    return $args;
+}
+
+// Filtros usados por versões/templates diferentes do Dokan
+add_filter( 'dokan_product_listing_arg',  'carroon_alpha_order_for_dokan', 20 );          // usado hoje
+add_filter( 'dokan_product_listing_query','carroon_alpha_order_for_dokan', 20 );          // compat. doc antiga
+add_filter( 'dokan_pre_product_listing_args', function( $args, $request = [] ) {
+    return carroon_alpha_order_for_dokan( $args );
+}, 20, 2 );
